@@ -48,6 +48,8 @@ def check_auction(base_url, item_id):
                 print(result["msg"])
         else:
             print("Auction check failed!", result.get('msg'))
+    elif response.status_code == 400:
+        print("Auction has not ended, or doesnt exist!", response.status_code)
     else:
         print("Failed to check auction end!", response.status_code)
 
@@ -118,6 +120,8 @@ def main_client_logic():
             print(bid_item_response)
         else:
             print("Invalid role selected!")
+
+    print("The Client will now exit, please restart if you would like to continue using the site.")
         
         
 
