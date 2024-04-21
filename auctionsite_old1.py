@@ -3,6 +3,10 @@ import mysql.connector
 from mysql.connector import Error, pooling
 from flask_apscheduler import APScheduler
 from flask_mail import Mail, Message
+from smtplib import SMTPException 
+import boto3   
+from botocore.exceptions import ClientError
+
 app = Flask(__name__) #initialize a new flask application
 scheduler = APScheduler()
 scheduler.init_app(app)
@@ -30,16 +34,69 @@ mail_settings = {
     "MAIL_USE_TLS": True,
     "MAIL_USE_SSL": False,
     "MAIL_USERNAME": '470auctionsite@gmail.com',
-    "MAIL_PASSWORD": '470_Auction_24!'
+    "MAIL_PASSWORD": 'xcbk qxmy mkoc jyxy'
 } 
 app.config.update(mail_settings)
 mail = Mail(app)
 
-def send_email(subject, recipients, body):
-    with app.app_context():
-        msg = Message(subject, sender=app.config.get("MAIL_USERNAME"), recipients=[recipients])
-        msg.body = body
-        mail.send(msg)
+
+
+def send_email(RECIPIENT, SUBJECT, BODY_TEXT, BODY_HTML):
+                    # Replace sender@example.com with your "From" address.
+            # This address must be verified with Amazon SES.
+        SENDER = "Sender Name <470Auctionsite@gmail.com>"
+
+            # Replace recipient@example.com with a "To" address. If your account 
+            # is still in the sandbox, this address must be verified.
+     
+
+            # If necessary, replace us-west-2 with the AWS Region you're using for Amazon SES.
+        AWS_REGION = "us-east-2"
+
+
+    
+
+            # The character encoding for the email.
+        CHARSET = "UTF-8"
+
+            # Create a new SES resource and specify a region.
+        client = boto3.client('ses',region_name=AWS_REGION)
+            # Try to send the email.
+        try:
+            #Provide the contents of the email.
+            response = client.send_email(
+                Destination={
+                    'ToAddresses': [
+                        RECIPIENT,
+                    ],
+                },
+                Message={
+                    'Body': {
+                        'Html': {
+                            'Charset': CHARSET,
+                            'Data': BODY_HTML,
+                        },
+                        'Text': {
+                            'Charset': CHARSET,
+                            'Data': BODY_TEXT,
+                        },
+                    },
+                    'Subject': {
+                        'Charset': CHARSET,
+                        'Data': SUBJECT,
+                    },
+                },
+                Source=SENDER,
+                # If you are not using a configuration set, comment or delete the
+                # following line
+                #ConfigurationSetName=CONFIGURATION_SET,
+            )
+        # Display an error if something goes wrong.	
+        except ClientError as e:
+            print(e.response['Error']['Message'])
+        else:
+            print("Email sent! Message ID:"),
+            print(response['MessageId'])
 
 
 def process_auction_end(item_id):
@@ -54,11 +111,10 @@ def process_auction_end(item_id):
              #       ORDER BY Highest_Bid DESC
               #      LIMIT 1""",
                #     (item_id,))
-        query = """ SELECT Bidder_ID, MAX(Bid_Amount) AS Highest_Bid, 
+        query = """ SELECT Bidder_ID, Bid_Amount AS Highest_Bid 
                     FROM bids 
                     WHERE Item_ID = %s
-                    GROUP BY Bidder_ID
-                    ORDER BY Highest_Bid DESC
+                    ORDER BY Bid_Amount DESC
                     LIMIT 1"""
         print("query: ", query, "item_id :", item_id)
         cursor.execute(query, (item_id,))
@@ -67,7 +123,17 @@ def process_auction_end(item_id):
             cursor.execute('SELECT Email FROM users WHERE User_ID = %s', (highest_bid['Bidder_ID'],))
             winner_info = cursor.fetchone()
             if winner_info:
-                send_email('Auction Won', [winner_info['Email']], 'Congratualtions, You won the auction!')
+                #print('Winner Email', winner_info)
+                BODY_HTML = """<html>
+            <head></head>
+            <body>
+            <h1>Congratualtions, You won the auction!</h1>
+            </body>
+            </html>
+                        """   
+                send_email('470Auctionsite@gmail.com', 'Auction Won', 'Congratualtions, You won the auction!', BODY_HTML)
+
+                #send_email(str([winner_info['Email']]), 'Auction Won', 'Congratualtions, You won the auction!', BODY_HTML)
 
             cursor.execute("SELECT Seller_ID FROM items WHERE Item_ID = %s", (item_id,))  #fetching seller information
             item_info = cursor.fetchone()
@@ -75,7 +141,16 @@ def process_auction_end(item_id):
                 cursor.execute('SELECT Email FROM users WHERE User_ID = %s', (item_info['Seller_ID'],))
                 seller_info = cursor.fetchone()
                 if seller_info:
-                    send_email("Your Auction has ended", [seller_info['Email']], "Your auction has ended and your item was sold.")
+                    #print('Seller Email', seller_info)
+                    BODY_HTML = """<html>
+            <head></head>
+            <body>
+            <h1>Your auction has ended and your item was sold.</h1>
+            </body>
+            </html>
+                        """   
+                    #send_email(str([seller_info['Email']]), 'Your Auction has ended', "Your auction has ended and your item was sold.", BODY_HTML)
+                    send_email('470Auctionsite@gmail.com', 'Your Auction has ended', "Your auction has ended and your item was sold.", BODY_HTML)
     except Error as e:
         print('Error while processing auction end',str(e)) 
     finally:
