@@ -44,7 +44,9 @@ mail = Mail(app)
 def send_email(RECIPIENT, SUBJECT, BODY_TEXT, BODY_HTML):
                     # Replace sender@example.com with your "From" address.
             # This address must be verified with Amazon SES.
-        SENDER = "Sender Name <470Auctionsite@gmail.com>"
+        SENDER = "470 Auction Site <470Auctionsite@gmail.com>"
+        #SENDER = "Sender Name <470Auctionsite@gmail.com>" original working
+
 
             # Replace recipient@example.com with a "To" address. If your account 
             # is still in the sandbox, this address must be verified.
@@ -111,6 +113,11 @@ def process_auction_end(item_id):
              #       ORDER BY Highest_Bid DESC
               #      LIMIT 1""",
                #     (item_id,))
+        cursor.execute("SELECT Email_Sent FROM items WHERE Item_ID = %s", (item_id,))
+        email_sent_info=cursor.fetchone()
+        if email_sent_info and email_sent_info['Email_Sent']:
+            print('Email already sent for Item_ID: ', item_id)
+            return
         query = """ SELECT Bidder_ID, Bid_Amount AS Highest_Bid 
                     FROM bids 
                     WHERE Item_ID = %s
@@ -119,9 +126,13 @@ def process_auction_end(item_id):
         print("query: ", query, "item_id :", item_id)
         cursor.execute(query, (item_id,))
         highest_bid = cursor.fetchone()  
+        cursor.execute("SELECT Seller_ID FROM items WHERE Item_ID = %s", (item_id,))  #fetching seller information
+        item_info = cursor.fetchone()
+
         if highest_bid:
             cursor.execute('SELECT Email FROM users WHERE User_ID = %s', (highest_bid['Bidder_ID'],))
             winner_info = cursor.fetchone()
+            
             if winner_info:
                 #print('Winner Email', winner_info)
                 BODY_HTML = """<html>
@@ -135,8 +146,7 @@ def process_auction_end(item_id):
 
                 #send_email(str([winner_info['Email']]), 'Auction Won', 'Congratualtions, You won the auction!', BODY_HTML)
 
-            cursor.execute("SELECT Seller_ID FROM items WHERE Item_ID = %s", (item_id,))  #fetching seller information
-            item_info = cursor.fetchone()
+
             if item_info:
                 cursor.execute('SELECT Email FROM users WHERE User_ID = %s', (item_info['Seller_ID'],))
                 seller_info = cursor.fetchone()
@@ -151,6 +161,24 @@ def process_auction_end(item_id):
                         """   
                     #send_email(str([seller_info['Email']]), 'Your Auction has ended', "Your auction has ended and your item was sold.", BODY_HTML)
                     send_email('470Auctionsite@gmail.com', 'Your Auction has ended', "Your auction has ended and your item was sold.", BODY_HTML)
+        else:
+              if item_info:
+                cursor.execute('SELECT Email FROM users WHERE User_ID = %s', (item_info['Seller_ID'],))
+                seller_info = cursor.fetchone()
+                if seller_info:
+                    #print('Seller Email', seller_info)
+                    BODY_HTML = """<html>
+            <head></head>
+            <body>
+            <h1>Your auction has ended but no bids were place.</h1>
+            </body>
+            </html>
+                        """   
+                    #send_email(str([seller_info['Email']]), 'Your Auction has ended', "Your auction has ended and your item was sold.", BODY_HTML)
+                    send_email('470Auctionsite@gmail.com', 'Your Auction has ended', "Your auction has ended but no bids were placed.", BODY_HTML)
+        cursor.execute("UPDATE items SET Email_Sent=1 WHERE Item_ID=%s",(item_id,))
+        connection.commit()
+
     except Error as e:
         print('Error while processing auction end',str(e)) 
     finally:
